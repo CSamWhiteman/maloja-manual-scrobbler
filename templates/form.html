@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Maloja Manual Scrobbler</title>
+    <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css"> <style>
+        body { font-family: sans-serif; line-height: 1.6; margin: 20px; }
+        /* Flex container for form and image */
+        .form-and-art-container {
+            display: flex; /* Use flexbox for layout */
+            gap: 30px; /* Space between form and image */
+            align-items: flex-start; /* Align items to the top */
+        }
+
+        .scrobble-form {
+             /* Optional: give the form a base width, allow it to shrink */
+            flex: 0 1 400px;
+        }
+
+        .album-art-container {
+            flex-shrink: 0; /* Prevent image container from shrinking */
+            width: 200px; /* Fixed width for the image area */
+            text-align: center; /* Center the image */
+        }
+
+        .album-art {
+            max-width: 100%; /* Ensure image fits within its container */
+            height: auto; /* Maintain aspect ratio */
+            border: 1px solid #ccc;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+            display: none; /* Initially hide the image */
+        }
+
+        form div { margin-bottom: 15px; }
+        label { display: inline-block; width: 80px; }
+        input[type="text"] { width: 300px; padding: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+        .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; } /* Added warning style */
+
+        /* Style for the autocomplete dropdown */
+        .ui-autocomplete {
+            max-height: 200px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            z-index: 1000;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        .ui-menu-item {
+             padding: 5px 10px;
+             cursor: pointer;
+        }
+         .ui-menu-item:hover,
+         .ui-menu-item.ui-state-active {
+            background-color: #f0f0f0;
+         }
+         a { color: #007bff; text-decoration: none; }
+         a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Manual Maloja Scrobbler</h1>
+
+    {% if message %}
+        <div class="message {{ status }}">
+            {{ message | safe }}
+        </div>
+    {% endif %}
+
+    <div class="form-and-art-container">
+
+        <div class="scrobble-form">
+            <form method="POST" action="{{ url_for('index') }}"> {# Action points to index #}
+                <div>
+                    <label for="artist">Artist:</label>
+                    <input type="text" id="artist" name="artist" value="{{ last_artist or '' }}" required>
+                </div>
+                <div>
+                    <label for="album">Album:</label>
+                    <input type="text" id="album" name="album" value="{{ last_album or '' }}" required>
+                </div>
+                <div>
+                    <label for="title">Title:</label>
+                    <input type="text" id="title" name="title" value="{{ last_title or '' }}" required>
+                </div>
+
+                <div>
+                    <button type="submit">Scrobble</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="album-art-container">
+            <img id="album-art" class="album-art" src="" alt="Album Art">
+        </div>
+
+    </div> <p><a href="{{ url_for('options') }}">Configure API Settings</a></p> {# Link to options page #}
+
+
+    <script src="//code.jquery.com/jquery-3.6.0.min.js"></script> <script src="//code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script> <script>
+        $(function() {
+            // Autocomplete for Artist field
+            $("#artist").autocomplete({
+                source: function(request, response) {
+                    $.getJSON("{{ url_for('search_artist') }}", { // Use url_for
+                        term: request.term
+                    }, response);
+                },
+                minLength: 2,
+                delay: 300
+            });
+
+            // Autocomplete for Album field
+            $("#album").autocomplete({
+                source: function(request, response) {
+                     var artist_term = $("#artist").val();
+                    $.getJSON("{{ url_for('search_album') }}", { // Use url_for
+                        term: request.term,
+                        artist: artist_term
+                    }, response);
+                },
+                minLength: 2,
+                 delay: 300,
+                 select: function(event, ui) {
+                     var selectedItem = ui.item;
+
+                     if (selectedItem && selectedItem.mbid) {
+                         var mbid = selectedItem.mbid;
+                         console.log("Album selected with MBID:", mbid);
+
+                         // Call the backend endpoint to get the cover art URL
+                         $.getJSON("{{ url_for('get_cover_art', mbid='') }}" + mbid, function(data) { // Use url_for
+                             var albumArtElement = $("#album-art");
+                             if (data && data.imageUrl) {
+                                 albumArtElement
+                                     .attr("src", data.imageUrl)
+                                     .show();
+                             } else {
+                                 console.log("No cover art found for MBID:", mbid);
+                                 albumArtElement
+                                     .attr("src", "")
+                                     .hide();
+                             }
+                         }).fail(function(jqXHR, textStatus, errorThrown) {
+                              console.error("Error fetching cover art for MBID:", mbid, textStatus, errorThrown);
+                              $("#album-art")
+                                  .attr("src", "")
+                                  .hide();
+                         });
+
+                     } else {
+                          console.log("Selected album item has no MBID.");
+                          $("#album-art")
+                              .attr("src", "")
+                              .hide();
+                     }
+                 }
+            });
+
+            // Autocomplete for Title field (Recording)
+             $("#title").autocomplete({
+                source: function(request, response) {
+                     var artist_term = $("#artist").val();
+                     var album_term = $("#album").val();
+                    $.getJSON("{{ url_for('search_title') }}", { // Use url_for
+                        term: request.term,
+                        artist: artist_term,
+                        album: album_term
+                    }, response);
+                },
+                minLength: 2,
+                 delay: 300
+            });
+
+            // Optional: Clear album art if artist or album fields are cleared manually
+            $("#artist, #album").on("input", function() {
+                 if ($(this).val() === "") {
+                     $("#album-art").attr("src", "").hide();
+                 }
+            });
+        });
+    </script>
+</body>
+</html>

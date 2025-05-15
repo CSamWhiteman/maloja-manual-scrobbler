@@ -1,0 +1,34 @@
+# Ignore the virtual environment directory
+.venv/
+venv/
+env/
+*venv*/
+
+# Ignore compiled Python files
+*.pyc
+__pycache__/
+
+# Ignore Flask session files (if using filesystem session)
+# If you switch to a database or other session storage, you might remove this.
+flask_session/
+
+# Ignore environment variables file (if you add one later)
+.env
+
+# Ignore editor/IDE specific files
+.idea/  # PyCharm files
+*.sublime-project
+*.sublime-workspace
+
+# Ignore OS specific files
+.DS_Store # macOS
+Thumbs.db # Windows
+
+# Ignore Maloja API key if hardcoded or in a local config file
+# (Though we moved it to session, if you used a file, ignore it here)
+# config.py # Example if config was in a file
+
+# Ignore any logs or temporary files
+*.log
+*.tmp
+

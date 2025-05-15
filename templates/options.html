@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Maloja Scrobbler Options</title>
+    <style>
+        body { font-family: sans-serif; line-height: 1.6; margin: 20px; }
+        form div { margin-bottom: 15px; }
+        label { display: inline-block; width: 120px; } /* Wider label for options */
+        input[type="text"] { width: 400px; padding: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
+        button:hover { background-color: #0056b3; }
+        .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+    </style>
+</head>
+<body>
+    <h1>Maloja Scrobbler Options</h1>
+
+    {% if message %}
+        <div class="message {{ status }}">
+            {{ message | safe }}
+        </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('options') }}">
+        <div>
+            <label for="api_key">Maloja API Key:</label>
+            <input type="text" id="api_key" name="api_key" value="{{ current_api_key or '' }}" required>
+        </div>
+        <div>
+            <label for="base_url">Maloja Base URL:</label>
+            <input type="text" id="base_url" name="base_url" value="{{ current_base_url or '' }}" required>
+            <small>e.g., https://scrobble.yourdomain.com/apis/mlj_1/newscrobble</small>
+        </div>
+        <div>
+            <button type="submit">Save Configuration</button>
+        </div>
+    </form>
+
+    <p><a href="{{ url_for('index') }}">Back to Scrobbler Form</a></p>
+
+</body>
+</html>
