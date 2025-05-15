@@ -28,7 +28,7 @@ def get_maloja_config():
     api_key = session.get(API_KEY_SESSION_KEY, DEFAULT_MALOJA_API_KEY)
     base_url = session.get(BASE_URL_SESSION_KEY, DEFAULT_MALOJA_BASE_URL)
     # Construct the full URL with the key
-    full_url = f"{base_url}?key={api_key}"
+    full_url = f"{base_url}/apis/mlj_1/newscrobble?key={api_key}"
     return api_key, base_url, full_url
 
 
