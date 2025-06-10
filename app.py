@@ -169,6 +169,7 @@ def upload_scrobble_log():
         scrobble_count = 0
         success_count = 0
         error_count = 0
+        warning_count = 0
 
         # Skip header lines (starting with #) and process data lines
         for line in lines:
@@ -216,11 +217,49 @@ def upload_scrobble_log():
                 try:
                     response = requests.post(maloja_api_full_url, json=payload, timeout=10)  # Add timeout
                     response.raise_for_status()
-                    scrobble_results.append({
-                        "artist": artist, "title": title,
-                        "status": "success", "message": "Scrobble successful!"
-                    })
-                    success_count += 1
+
+                    # Find "scrobble_exists" warnings and alert user.
+                    response_json = {}
+                    try:
+                        response_json = response.json()
+                    except requests.exceptions.JSONDecodeError:
+                        print(f"Warning: Could not decode JSON from successful response for {artist} - {title}. Response text: {response.text}")
+                        # but it did work!
+                        scrobble_results.append({
+                            "artist": artist, "title": title,
+                            "status": "success", "message": "Scrobble successful (non-JSON response)."
+                        })
+                        success_count += 1
+                        continue # Move to next scrobble
+
+                    if response_json.get('status') == 'success':
+                        message_status = "Scrobble successful!"
+                        result_status = "success"
+
+                        warnings = response_json.get('warnings', [])
+                        for warning in warnings:
+                            if warning.get('type') == 'scrobble_exists':
+                                message_status = "Scrobble already exists! (skipped)"
+                                result_status = "warning"
+                                warning_count += 1
+                                break
+
+                        scrobble_results.append({
+                            "artist": artist, "title": title,
+                            "status": result_status, "message": message_status
+                        })
+                        # if no warnings, then tally success
+                        if result_status == "success":
+                            success_count += 1
+                    else:
+                        error_message = f"API reported non-successful scrobble status: {response_json.get('desc', response_json)}"
+                        scrobble_results.append({
+                            "artist": artist, "title": title,
+                            "status": "failed", "message": error_message
+                        })
+                        error_count += 1
+
+
                 except requests.exceptions.RequestException as e:
                     error_message = f"API Error: {e}"
                     if hasattr(e, 'response') and e.response is not None:
