@@ -4,68 +4,89 @@
     <title>Maloja Manual Scrobbler</title>
     <link rel="stylesheet" href="//code.jquery.com/ui/1.13.2/themes/base/jquery-ui.css"> <style>
         body { font-family: sans-serif; line-height: 1.6; margin: 20px; }
+        /* Flex container for main content */
+        .main-content-container {
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+        }
+
         /* Flex container for form and image */
         .form-and-art-container {
-            display: flex; /* Use flexbox for layout */
-            gap: 30px; /* Space between form and image */
-            align-items: flex-start; /* Align items to the top */
+            display: flex;
+            gap: 30px;
+            align-items: flex-start;
+            flex: 1; /* Allow this section to grow */
+            min-width: 500px; /* Ensure it doesn't get too small before wrapping */
+            flex-wrap: wrap; /* Allow form and art to wrap on smaller screens */
         }
 
         .scrobble-form {
-             /* Optional: give the form a base width, allow it to shrink */
-            flex: 0 1 400px;
+            flex: 0 1 400px; /* Base width for form, allow to shrink/grow */
+            min-width: 300px; /* Minimum width for form */
         }
 
         .album-art-container {
-            flex-shrink: 0; /* Prevent image container from shrinking */
-            width: 200px; /* Fixed width for the image area */
-            text-align: center; /* Center the image */
+            flex-shrink: 0;
+            width: 200px;
+            text-align: center;
         }
 
         .album-art {
-            max-width: 100%; /* Ensure image fits within its container */
-            height: auto; /* Maintain aspect ratio */
+            max-width: 100%;
+            height: auto;
             border: 1px solid #ccc;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
             display: none; /* Initially hide the image */
         }
 
+        .upload-section {
+            flex: 1 1 100%; /* Take full width below the main form/art section */
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+
         form div { margin-bottom: 15px; }
         label { display: inline-block; width: 80px; }
-        input[type="text"] { width: 300px; padding: 8px; border: 1px solid #ccc; box-sizing: border-box; }
+        input[type="text"], input[type="file"] { width: 300px; padding: 8px; border: 1px solid #ccc; box-sizing: border-box; }
         button { padding: 10px 15px; background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; }
         button:hover { background-color: #0056b3; }
         .message { padding: 10px; margin-bottom: 15px; border-radius: 4px; }
         .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
         .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
-        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; } /* Added warning style */
+        .warning { background-color: #fff3cd; color: #856404; border: 1px solid #ffeeba; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; } /* Added info style */
 
-        /* Style for the autocomplete dropdown */
-        .ui-autocomplete {
-            max-height: 200px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            z-index: 1000;
-            border: 1px solid #ccc;
-            background-color: #fff;
+        a { color: #007bff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+
+        .batch-results ul {
             list-style: none;
             padding: 0;
             margin: 0;
+            max-height: 300px; /* Limit height for long lists */
+            overflow-y: auto; /* Add scrollbar if too many results */
+            border: 1px solid #eee;
+            padding: 10px;
         }
-        .ui-menu-item {
-             padding: 5px 10px;
-             cursor: pointer;
+        .batch-results li {
+            padding: 5px 0;
+            border-bottom: 1px dotted #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
-         .ui-menu-item:hover,
-         .ui-menu-item.ui-state-active {
-            background-color: #f0f0f0;
-         }
-         a { color: #007bff; text-decoration: none; }
-         a:hover { text-decoration: underline; }
+        .batch-results li:last-child {
+            border-bottom: none;
+        }
+        .batch-results .status-success { color: green; }
+        .batch-results .status-failed { color: red; }
     </style>
 </head>
 <body>
-    <h1>Manual Maloja Scrobbler</h1>
+    <h1>Maloja Manual Scrobbler</h1>
 
     {% if message %}
         <div class="message {{ status }}">
@@ -73,42 +94,69 @@
         </div>
     {% endif %}
 
-    <div class="form-and-art-container">
+    <div class="main-content-container">
+        <div class="form-and-art-container">
+            <div class="scrobble-form">
+                <h2>Single Scrobble</h2>
+                <form method="POST" action="{{ url_for('index') }}">
+                    <div>
+                        <label for="artist">Artist:</label>
+                        <input type="text" id="artist" name="artist" value="{{ last_artist or '' }}" required>
+                    </div>
 
-        <div class="scrobble-form">
-            <form method="POST" action="{{ url_for('index') }}"> {# Action points to index #}
-                <div>
-                    <label for="artist">Artist:</label>
-                    <input type="text" id="artist" name="artist" value="{{ last_artist or '' }}" required>
-                </div>
-                <div>
-                    <label for="album">Album:</label>
-                    <input type="text" id="album" name="album" value="{{ last_album or '' }}" required>
-                </div>
-                <div>
-                    <label for="title">Title:</label>
-                    <input type="text" id="title" name="title" value="{{ last_title or '' }}" required>
-                </div>
+                    <div>
+                        <label for="album">Album:</label>
+                        <input type="text" id="album" name="album" value="{{ last_album or '' }}" required>
+                    </div>
+                    <div>
+                        <label for="title">Title:</label>
+                        <input type="text" id="title" name="title" value="{{ last_title or '' }}" required>
+                    </div>
+                    <div>
+                        <button type="submit">Scrobble</button>
+                    </div>
+                </form>
+            </div>
 
+            <div class="album-art-container">
+                <img id="album-art" class="album-art" src="" alt="Album Art">
+            </div>
+        </div>
+
+        <div class="upload-section">
+            <h2>Batch Scrobble from Log File</h2>
+            <form method="POST" action="{{ url_for('upload_scrobble_log') }}" enctype="multipart/form-data">
                 <div>
-                    <button type="submit">Scrobble</button>
+                    <label for="scrobble_file">Upload Log:</label>
+                    <input type="file" id="scrobble_file" name="scrobble_file" accept=".log,.txt" required>
+                </div>
+                <div>
+                    <button type="submit">Upload & Scrobble Batch</button>
                 </div>
             </form>
+
+            {% if batch_results %}
+                <h3>Batch Scrobble Results:</h3>
+                <div class="batch-results">
+                    <ul>
+                        {% for result in batch_results %}
+                            <li class="status-{{ result.status }}">
+                                <span><strong>{{ result.artist }}</strong> - {{ result.title }}</span>
+                                <span>{{ result.message }}</span>
+                            </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            {% endif %}
         </div>
-
-        <div class="album-art-container">
-            <img id="album-art" class="album-art" src="" alt="Album Art">
-        </div>
-
-    </div> <p><a href="{{ url_for('options') }}">Configure API Settings</a></p> {# Link to options page #}
-
+    </div> <p><a href="{{ url_for('options') }}">Configure API Settings</a></p>
 
     <script src="//code.jquery.com/jquery-3.6.0.min.js"></script> <script src="//code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script> <script>
         $(function() {
             // Autocomplete for Artist field
             $("#artist").autocomplete({
                 source: function(request, response) {
-                    $.getJSON("{{ url_for('search_artist') }}", { // Use url_for
+                    $.getJSON("{{ url_for('search_artist') }}", {
                         term: request.term
                     }, response);
                 },
@@ -120,7 +168,7 @@
             $("#album").autocomplete({
                 source: function(request, response) {
                      var artist_term = $("#artist").val();
-                    $.getJSON("{{ url_for('search_album') }}", { // Use url_for
+                    $.getJSON("{{ url_for('search_album') }}", {
                         term: request.term,
                         artist: artist_term
                     }, response);
@@ -135,7 +183,7 @@
                          console.log("Album selected with MBID:", mbid);
 
                          // Call the backend endpoint to get the cover art URL
-                         $.getJSON("{{ url_for('get_cover_art', mbid='') }}" + mbid, function(data) { // Use url_for
+                         $.getJSON("{{ url_for('get_cover_art', mbid='') }}" + mbid, function(data) {
                              var albumArtElement = $("#album-art");
                              if (data && data.imageUrl) {
                                  albumArtElement
@@ -168,7 +216,7 @@
                 source: function(request, response) {
                      var artist_term = $("#artist").val();
                      var album_term = $("#album").val();
-                    $.getJSON("{{ url_for('search_title') }}", { // Use url_for
+                    $.getJSON("{{ url_for('search_title') }}", {
                         term: request.term,
                         artist: artist_term,
                         album: album_term

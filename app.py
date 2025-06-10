@@ -6,6 +6,7 @@ import musicbrainzngs
 import musicbrainzngs.musicbrainz
 from musicbrainzngs.musicbrainz import WebServiceError
 
+# TODO: "Clear All" button
 app = Flask(__name__)
 # --- IMPORTANT: Flask Session requires a secret key ---
 # Change this to a random, complex string in production!
@@ -17,7 +18,6 @@ BASE_URL_SESSION_KEY = 'maloja_base_url'
 
 
 # --- Default Configuration (used if nothing is set in session) ---
-# You can hard code your configuration here if needed.
 DEFAULT_MALOJA_API_KEY = ""
 DEFAULT_MALOJA_BASE_URL = ""
 
@@ -49,6 +49,7 @@ def index():
     last_artist = None
     last_title = None
     last_album = None
+    batch_results = None  # To store results from batch upload
 
     # Get current configuration
     api_key, base_url, maloja_api_full_url = get_maloja_config()
@@ -58,48 +59,47 @@ def index():
         status = "warning"
 
     if request.method == 'POST':
-        last_artist = request.form.get('artist')
-        last_title = request.form.get('title')
-        last_album = request.form.get('album')
-
-        # Validate required fields
-        if not last_artist or not last_title or not last_album:
-             message = "Error: Artist, Title, and Album are required."
-             status = "error"
+        # Check if this is a regular form submission or a file upload
+        if 'scrobble_file' in request.files:
+            # This is a file upload request
+            # Logic will be handled in the /upload_scrobble_log route
+            # This part of index() will not execute for file uploads as they go to a different endpoint
+            pass
         else:
-            # Maloja API requires a timestamp
-            timestamp = int(time.time()) # Current Unix timestamp
+            # This is a regular single scrobble form submission
+            last_artist = request.form.get('artist')
+            last_title = request.form.get('title')
+            last_album = request.form.get('album')
 
-            # Construct the JSON payload based on your findings
-            payload = {
-                "artist": last_artist,
-                "title": last_title,
-                "album": last_album,
-                "timestamp": timestamp
-            }
-
-            try:
-                # Send the POST request with the JSON body using the configured URL
-                response = requests.post(maloja_api_full_url, json=payload)
-
-                # Check if the request was successful (status code 2xx)
-                response.raise_for_status() # This will raise an exception for 4xx or 5xx errors
-
-                message = "Scrobble successful!"
-                status = "success"
-
-            except requests.exceptions.RequestException as e:
-                # Handle any errors during the request (network issues, bad status codes)
-                message = f"Scrobble failed: {e}"
+            if not last_artist or not last_title or not last_album:
+                message = "Error: Artist, Title, and Album are required for single scrobble."
                 status = "error"
-                if 'response' in locals() and response is not None: # Check if response object exists
-                     message += f" | Status Code: {response.status_code}"
-                     try:
-                        # Attempt to get error details from response body if it's JSON
-                        error_details = response.json()
-                        message += f" | Details: {error_details}"
-                     except requests.exceptions.JSONDecodeError:
-                         message += f" | Response Body: {response.text}"
+            else:
+                timestamp = int(time.time())
+                payload = {
+                    "artist": last_artist,
+                    "title": last_title,
+                    "album": last_album,
+                    "time": timestamp
+                }
+
+                try:
+                    response = requests.post(maloja_api_full_url, json=payload)
+                    response.raise_for_status()
+
+                    message = "Single scrobble successful!"
+                    status = "success"
+
+                except requests.exceptions.RequestException as e:
+                    message = f"Single scrobble failed: {e}"
+                    status = "error"
+                    if 'response' in locals() and response is not None:
+                        message += f" | Status Code: {response.status_code}"
+                        try:
+                            error_details = response.json()
+                            message += f" | Details: {error_details}"
+                        except requests.exceptions.JSONDecodeError:
+                            message += f" | Response Body: {response.text}"
 
 
     # Render the template again, but this time with the message and last entered values
@@ -138,6 +138,112 @@ def options():
                            current_base_url=current_base_url,
                            message=message,
                            status=status)
+
+
+# --- Uploading Scrobble Log File ---
+@app.route('/upload_scrobble_log', methods=['POST'])
+def upload_scrobble_log():
+    if 'scrobble_file' not in request.files:
+        return render_template('form.html', message="No file part in the request.", status="error")
+
+    file = request.files['scrobble_file']
+
+    if file.filename == '':
+        return render_template('form.html', message="No selected file.", status="error")
+
+    if file:
+        # Get current configuration for Maloja API
+        api_key, base_url, maloja_api_full_url = get_maloja_config()
+
+        # Check if config is set
+        if not api_key or not base_url:  # simplified check, could be more robust
+            return render_template('form.html',
+                                   message="Maloja API configuration is missing. Please set it in Options.",
+                                   status="error")
+
+        # Read file content
+        file_content = file.read().decode('utf-8')
+        lines = file_content.splitlines()
+
+        scrobble_results = []
+        scrobble_count = 0
+        success_count = 0
+        error_count = 0
+
+        # Skip header lines (starting with #) and process data lines
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue  # Skip empty lines and comments/headers
+
+            # Split by tab delimiter
+            parts = line.split('\t')
+
+            # Ensure we have enough parts for the required data
+            # ARTIST #ALBUM #TITLE #TRACKNUM #LENGTH #RATING #TIMESTAMP #MUSICBRAINZ_TRACKID
+            # 0      1      2       3          4       5       6           7
+            if len(parts) >= 7:
+                artist = parts[0].strip()
+                album = parts[1].strip()
+                title = parts[2].strip()
+                timestamp_str = parts[6].strip()
+
+                # Basic validation for timestamp
+                try:
+                    timestamp = int(timestamp_str)
+                except ValueError:
+                    scrobble_results.append({
+                        "artist": artist, "title": title,
+                        "status": "failed", "message": f"Invalid timestamp: {timestamp_str}"
+                    })
+                    error_count += 1
+                    continue  # Skip to next line
+
+                scrobble_count += 1
+
+                payload = {
+                    "artist": artist,
+                    "album": album,
+                    "title": title,
+                    "time": timestamp
+                }
+
+
+                try:
+                    response = requests.post(maloja_api_full_url, json=payload, timeout=10)  # Add timeout
+                    response.raise_for_status()
+                    scrobble_results.append({
+                        "artist": artist, "title": title,
+                        "status": "success", "message": "Scrobble successful!"
+                    })
+                    success_count += 1
+                except requests.exceptions.RequestException as e:
+                    error_message = f"API Error: {e}"
+                    if hasattr(e, 'response') and e.response is not None:
+                        error_message += f" (Status: {e.response.status_code})"
+                        try:
+                            error_details = e.response.json()
+                            error_message += f" Details: {error_details}"
+                        except requests.exceptions.JSONDecodeError:
+                            error_message += f" Body: {e.response.text}"
+                    scrobble_results.append({
+                        "artist": artist, "title": title,
+                        "status": "failed", "message": error_message
+                    })
+                    error_count += 1
+            else:
+                scrobble_results.append({
+                    "artist": "N/A", "title": line,
+                    "status": "failed", "message": "Insufficient data fields on line."
+                })
+                error_count += 1
+
+        summary_message = f"Processed {scrobble_count} scrobbles: {success_count} succeeded, {error_count} failed."
+
+        return render_template('form.html', message=summary_message, status="info",
+                               batch_results=scrobble_results)
+
+    return render_template('form.html', message="An unexpected error occurred during file upload.", status="error")
 
 
 # --- MusicBrainz Search Endpoints ---
