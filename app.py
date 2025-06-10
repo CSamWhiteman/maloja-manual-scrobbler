@@ -201,6 +201,10 @@ def upload_scrobble_log():
 
                 scrobble_count += 1
 
+                # Important for anyone who isn't me!!!
+                # Eastern Time Offset Correction because I can't set a timezone on Rockbox.
+                timestamp = timestamp + (4 * 3600)
+
                 payload = {
                     "artist": artist,
                     "album": album,
